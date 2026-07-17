@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from data_providers.yahoo_finance import YahooFinanceProvider
+from data.company_data import CompanyData
 
 from fundamental.analyzer import FundamentalAnalyzer
 from fundamental.growth_analyzer import GrowthAnalyzer
@@ -59,7 +59,7 @@ class FundamentalCollector:
     """
 
     def __init__(self):
-        self.provider = YahooFinanceProvider()
+        self.company_data = CompanyData()
         self.analyzer = FundamentalAnalyzer()
         self.growth = GrowthAnalyzer()
         self.valuation = ValuationAnalyzer()
@@ -114,8 +114,9 @@ class FundamentalCollector:
         Returns standardized company data.
         """
 
-        company_data = self.provider.get_complete_company(ticker)
-
+        company_data = self.company_data.load(
+            ticker
+        )
         print(company_data["profile"])
 
         financial_data = {

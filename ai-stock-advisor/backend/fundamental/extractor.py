@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import pandas as pd
 
 from fundamental.financial_mapper import FinancialMapper
 
@@ -14,30 +15,55 @@ class FinancialExtractor:
     """
 
     @staticmethod
-    def _latest(statement: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Returns the latest financial statement.
-        """
+    def _latest(statement):
 
-        if not statement:
+        if statement is None:
             return {}
 
-        latest_period = list(statement.keys())[0]
+        if isinstance(statement, pd.DataFrame):
 
-        return statement[latest_period]
+            if statement.empty:
+                return {}
+
+            return statement.iloc[:, 0].to_dict()
+
+        if isinstance(statement, dict):
+
+            if len(statement) == 0:
+                return {}
+
+            latest_period = list(statement.keys())[0]
+
+            return statement[latest_period]
+
+        return {}
 
     @staticmethod
-    def _previous(statement: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Returns the previous financial statement.
-        """
+    def _previous(statement):
 
-        if len(statement) < 2:
+        if statement is None:
             return {}
 
-        previous_period = list(statement.keys())[1]
+        if isinstance(statement, pd.DataFrame):
 
-        return statement[previous_period]
+            if statement.empty:
+                return {}
+
+            if statement.shape[1] < 2:
+                return {}
+
+            return statement.iloc[:, 1].to_dict()
+
+        if isinstance(statement, dict):
+
+            if len(statement) < 2:
+                return {}
+
+            previous_period = list(statement.keys())[1]
+
+            return statement[previous_period]
+
+        return {}
 
     @staticmethod
     def extract(
@@ -69,25 +95,13 @@ class FinancialExtractor:
             {}
         )
 
-        # -----------------------------
-        # Latest statements
-        # -----------------------------
-
         latest_income = FinancialExtractor._latest(income)
         latest_balance = FinancialExtractor._latest(balance)
         latest_cashflow = FinancialExtractor._latest(cashflow)
 
-        # -----------------------------
-        # Previous statements
-        # -----------------------------
-
         previous_income = FinancialExtractor._previous(income)
         previous_balance = FinancialExtractor._previous(balance)
         previous_cashflow = FinancialExtractor._previous(cashflow)
-
-        # -----------------------------
-        # Standardized mapping
-        # -----------------------------
 
         mapped = FinancialMapper.map(
             {
@@ -110,23 +124,18 @@ class FinancialExtractor:
         )
 
         return {
-
-            # Complete history
             "income_statement": income,
             "balance_sheet": balance,
             "cash_flow": cashflow,
 
-            # Latest statements
             "latest_income": latest_income,
             "latest_balance": latest_balance,
             "latest_cash_flow": latest_cashflow,
 
-            # Previous statements
             "previous_income": previous_income,
             "previous_balance": previous_balance,
             "previous_cash_flow": previous_cashflow,
 
-            # Standardized values
             "mapped": mapped,
             "previous_mapped": previous_mapped,
         }

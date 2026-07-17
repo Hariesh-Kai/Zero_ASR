@@ -1,4 +1,5 @@
 from typing import Any, Dict
+import math
 
 
 class FinancialMapper:
@@ -6,15 +7,41 @@ class FinancialMapper:
     Maps Yahoo Finance financial statements into
     standardized values used by the analysis engine.
     """
-
+    
     @staticmethod
     def _first(data: Dict[str, Any], *keys):
         """
         Returns the first matching key found.
+        Converts missing values to None.
         """
+
         for key in keys:
-            if key in data:
-                return data[key]
+
+            if key not in data:
+                continue
+
+            value = data[key]
+
+            if value is None:
+                return None
+
+            if isinstance(value, str):
+
+                value = value.strip()
+
+                if value == "":
+                    return None
+
+                if value.upper() == "N/A":
+                    return None
+
+            if isinstance(value, float):
+
+                if math.isnan(value):
+                    return None
+
+            return value
+
         return None
 
     @staticmethod

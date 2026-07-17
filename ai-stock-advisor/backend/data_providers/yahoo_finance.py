@@ -4,18 +4,25 @@ import yfinance as yf
 
 
 class YahooFinanceProvider:
-    """
-    Handles all communication with Yahoo Finance.
-    """
 
     def __init__(self):
-        pass
 
-    def _get_stock(self, ticker: str):
-        """
-        Returns a Yahoo Finance Ticker object.
-        """
-        return yf.Ticker(ticker.upper())
+        self._stocks = {}
+
+    def _get_stock(
+        self,
+        ticker: str,
+    ):
+
+        ticker = ticker.upper()
+
+        if ticker not in self._stocks:
+
+            self._stocks[ticker] = yf.Ticker(
+                ticker
+            )
+
+        return self._stocks[ticker]
 
 
     def get_income_statement(self, ticker: str) -> Dict[str, Any]:
@@ -25,7 +32,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.financials.fillna("").to_dict()
+            return stock.financials.fillna("")
         except Exception:
             return {}
 
@@ -36,7 +43,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.balance_sheet.fillna("").to_dict()
+            return stock.balance_sheet.fillna("")
         except Exception:
             return {}
 
@@ -47,7 +54,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.cashflow.fillna("").to_dict()
+            return stock.cashflow.fillna("")
         except Exception:
             return {}
 
@@ -58,7 +65,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.quarterly_financials.fillna("").to_dict()
+            return stock.quarterly_financials.fillna("")
         except Exception:
             return {}
 
@@ -69,7 +76,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.quarterly_balance_sheet.fillna("").to_dict()
+            return stock.quarterly_balance_sheet.fillna("")
         except Exception:
             return {}
 
@@ -80,7 +87,7 @@ class YahooFinanceProvider:
         stock = self._get_stock(ticker)
 
         try:
-            return stock.quarterly_cashflow.fillna("").to_dict()
+            return stock.quarterly_cashflow.fillna("")
         except Exception:
             return {}
 
@@ -156,5 +163,29 @@ class YahooFinanceProvider:
                 "cash_flow": self.get_quarterly_cash_flow(ticker),
             },
         }
-        
+    
+    def get_history(
+        self,
+        ticker: str,
+        period: str = "2y",
+        interval: str = "1d",
+    ):
+
+        stock = self._get_stock(
+            ticker
+        )
+
+        history = stock.history(
+            period=period,
+            interval=interval,
+            auto_adjust=True,
+        )
+
+        if not history.empty:
+
+            history.reset_index(
+                inplace=True
+            )
+
+        return history
         

@@ -1,3 +1,5 @@
+from fundamental.base_analyzer import BaseAnalyzer
+
 class BuffettAnalyzer:
     """
     Warren Buffett Quality Analysis.
@@ -75,12 +77,20 @@ class BuffettAnalyzer:
         else:
             quality = "Poor"
 
-        return {
-            "score": score,
-            "max_score": 5,
+        return BaseAnalyzer.build_result(
+        score=score,
+        max_score=5,
+        quality=quality,
+        metrics={
             "roe": roe,
             "debt_to_equity": debt_to_equity,
             "gross_margin": gross_margin,
             "interest_coverage": interest_coverage,
-            "quality": quality,
-        }
+            "operating_cash_flow": operating_cash_flow,
+            "net_income": net_income,
+        },
+        summary=(
+            f"Buffett analysis indicates a {quality.lower()} "
+            f"quality business with a score of {score}/5."
+        ),
+    )
