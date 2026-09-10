@@ -46,7 +46,12 @@ class AudioFrontend(nn.Module):
             pad_mode="reflect",
         )
 
-    def normalize_loudness(self, waveform: torch.Tensor, target_rms: float = 0.1) -> torch.Tensor:
+    def normalize_loudness(
+        self,
+        waveform: torch.Tensor,
+        lengths: torch.Tensor = None,
+        target_rms: float = 0.1,
+    ) -> torch.Tensor:
         """
         Normalizes waveform to target RMS amplitude to handle different microphone sensitivities.
         Supports:
@@ -61,7 +66,16 @@ class AudioFrontend(nn.Module):
             waveform = waveform.mean(dim=1)
 
         # Waveform is now guaranteed to be 2D: (batch, samples)
-        rms = torch.sqrt(torch.mean(waveform ** 2, dim=-1, keepdim=True) + 1e-8)
+        if lengths is None:
+            rms = torch.sqrt(torch.mean(waveform ** 2, dim=-1, keepdim=True) + 1e-8)
+        else:
+            lengths = lengths.to(waveform.device).clamp(min=1, max=waveform.size(-1))
+            sample_positions = torch.arange(waveform.size(-1), device=waveform.device).unsqueeze(0)
+            valid = sample_positions < lengths.unsqueeze(1)
+            valid_waveform = waveform * valid
+            rms = torch.sqrt(
+                valid_waveform.pow(2).sum(dim=-1, keepdim=True) / lengths.unsqueeze(1) + 1e-8
+            )
         scale = torch.where(rms > 1e-4, target_rms / rms, torch.ones_like(rms))
         scale = torch.clamp(scale, min=0.1, max=10.0)
         waveform = waveform * scale
@@ -70,26 +84,45 @@ class AudioFrontend(nn.Module):
         waveform = torch.clamp(waveform, -1.0, 1.0)
         return waveform
 
-    def apply_cmvn(self, mel_spec: torch.Tensor) -> torch.Tensor:
+    def apply_cmvn(self, mel_spec: torch.Tensor, lengths: torch.Tensor = None) -> torch.Tensor:
         """
         Applies Cepstral Mean and Variance Normalization (CMVN) across time frames.
         Shape: (batch, n_mels, time)
         """
-        mean = mel_spec.mean(dim=-1, keepdim=True)
-        std = mel_spec.std(dim=-1, keepdim=True) + 1e-5
-        return (mel_spec - mean) / std
+        if lengths is None:
+            mean = mel_spec.mean(dim=-1, keepdim=True)
+            std = mel_spec.std(dim=-1, keepdim=True) + 1e-5
+            return (mel_spec - mean) / std
 
-    def forward(self, waveform: torch.Tensor, apply_norm: bool = True) -> torch.Tensor:
+        lengths = lengths.to(mel_spec.device).clamp(min=1, max=mel_spec.size(-1))
+        frame_positions = torch.arange(mel_spec.size(-1), device=mel_spec.device).unsqueeze(0)
+        valid = frame_positions < lengths.unsqueeze(1)
+        valid_float = valid.unsqueeze(1).to(mel_spec.dtype)
+        counts = lengths.view(-1, 1, 1).to(mel_spec.dtype)
+        mean = (mel_spec * valid_float).sum(dim=-1, keepdim=True) / counts
+        variance = ((mel_spec - mean) * valid_float).pow(2).sum(dim=-1, keepdim=True) / counts
+        normalized = (mel_spec - mean) / torch.sqrt(variance + 1e-5)
+        return normalized * valid_float
+
+    def forward(
+        self,
+        waveform: torch.Tensor,
+        lengths: torch.Tensor = None,
+        apply_norm: bool = True,
+    ) -> torch.Tensor:
         """
         Transforms raw audio waveform into normalized Log-Mel spectrogram.
         Returns tensor of shape: (batch, time, n_mels)
         """
         if apply_norm:
-            waveform = self.normalize_loudness(waveform)
+            waveform = self.normalize_loudness(waveform, lengths=lengths)
         elif waveform.ndim == 1:
             waveform = waveform.unsqueeze(0)
         elif waveform.ndim == 3:
             waveform = waveform.mean(dim=1)
+
+        if lengths is not None:
+            lengths = torch.div(lengths, self.hop_length, rounding_mode="floor") + 1
 
         # Extract Mel power spectrogram: shape (batch, n_mels, time)
         mel = self.mel_spectrogram(waveform)
@@ -98,7 +131,7 @@ class AudioFrontend(nn.Module):
         log_mel = torch.log(torch.clamp(mel, min=1e-5))
 
         # CMVN across time dimension
-        norm_mel = self.apply_cmvn(log_mel)
+        norm_mel = self.apply_cmvn(log_mel, lengths=lengths)
 
         # Reshape to (batch, time, n_mels) for acoustic encoder
         norm_mel = norm_mel.transpose(1, 2)

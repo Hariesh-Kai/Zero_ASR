@@ -17,6 +17,8 @@ Supports **English** and **Romanized Tamil** transcription with a FastAPI backen
 - [Training — Resume on Any Machine](#training--resume-on-any-machine)
   - [Option 2 — Quick Fine-Tune (Recommended First)](#option-2--quick-fine-tune-recommended-first)
   - [Option 1 — Full Long Run](#option-1--full-long-run)
+- [CPU Incremental Training](#cpu-incremental-training)
+- [Google Drive Storage](DRIVE_SETUP.md)
 - [Setup on Colab / Kaggle / Company PC](#setup-on-colab--kaggle--company-pc)
 - [API Endpoints](#api-endpoints)
 - [Current Model Status](#current-model-status)
@@ -132,6 +134,8 @@ Zero_ASR/
 ├── start_frontend.bat             # Windows: start React dev server
 ├── start_training.bat             # Windows: run training / fine-tune
 ├── TRAINING_PROMPT.md             # Agent prompt for Colab / Kaggle
+├── CPU_TRAINING.md                # CPU five-epoch training handoff
+├── requirements.txt               # Python dependencies
 └── README.md
 ```
 
@@ -178,6 +182,29 @@ npm install
 cd ..
 ```
 
+## CPU Incremental Training
+
+For machines without CUDA, use the isolated CPU workflow documented in
+[CPU_TRAINING.md](CPU_TRAINING.md). It runs exactly five additional epochs per
+command and resumes from `backend/checkpoints/cpu_finetune/` on the next run.
+
+It starts from the existing epoch-50 model but never overwrites
+`backend/checkpoints/compact_conformer/`, which preserves the original GPU
+training result. The complete handoff instructions, data prerequisites,
+settings, checkpoint behavior, and deployment notes are in that document.
+
+```bash
+source venv/bin/activate
+python backend/prepare_data.py
+python backend/train_cpu_increment.py
+```
+
+When local disk space is limited, place the dataset, manifests, source
+checkpoint, and `cpu_finetune` directory on a mounted Google Drive and pass
+their paths with `--train_manifest`, `--val_manifest`, `--source_model_dir`,
+and `--checkpoint_dir`. See [CPU_TRAINING.md](CPU_TRAINING.md) for the Google
+Colab mount and repeatable command.
+
 ### 5. Start the backend
 
 ```bash
@@ -207,7 +234,11 @@ Open **http://localhost:5173** in your browser. The app connects to the backend 
 ## Training — Resume on Any Machine
 
 The pre-trained checkpoint (epoch 50, CTC loss 0.83) is included in the repo.
-You can **resume training directly** without starting from scratch.
+You can **resume training directly** without starting from scratch. Before a
+corrective fine-tune, rebuild the manifests so duration metadata is accurate.
+The training pipeline now ignores padded audio during loudness and CMVN,
+does not add unused language tags to English targets, and restores the
+learning-rate scheduler when resuming.
 
 ### Data Setup (required before training)
 
@@ -230,6 +261,9 @@ python backend/prepare_data.py \
     --librispeech_dir backend/data/LibriSpeech \
     --output_dir backend/data/manifests
 ```
+
+The current data preparation script uses audio metadata to keep utterances
+between 0.5 and 15 seconds. Re-run it when using older manifests.
 
 ---
 
@@ -392,9 +426,9 @@ Response:
 - [x] React frontend with live mic recording
 - [x] SpecAugment + AMP training
 - [x] WER/CER evaluation during training
-- [ ] **Fine-tune Option 2** — reduce WER to <30%
+- [ ] **Fine-tune corrected pipeline** — rebuild manifests, then reduce WER
 - [ ] **Scale up Option 1** — 10–12M param model
-- [ ] Beam search CTC decoding + language model rescoring
+- [x] Prefix beam-search CTC decoding (language-model free)
 - [ ] Noise augmentation (RIR + MUSAN) for mic robustness
 - [ ] ONNX export for edge deployment
 - [ ] Tamil audio training data

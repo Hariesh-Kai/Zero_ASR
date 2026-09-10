@@ -3,7 +3,7 @@ CTC Decoding Module.
 Provides fast Greedy Argmax Decoding with CTC blank collapsing and streaming state management.
 """
 
-from typing import List, Tuple, Any, Union
+from typing import Dict, List, Tuple, Any, Union
 from asr_engine.tokenizer.char_tokenizer import CharTokenizer
 
 
@@ -62,6 +62,56 @@ class CTCDecoder:
         # Fallback list of lists
         frame_ids = [max(range(len(row)), key=lambda i: row[i]) for row in logits]
         return self.decode_tokens(frame_ids)
+
+    def decode_beam(self, logits, beam_width: int = 10) -> str:
+        """Decode CTC log-probabilities with language-model-free beam search."""
+        import torch
+
+        log_probs = logits.detach().float().cpu() if isinstance(logits, torch.Tensor) else torch.as_tensor(logits, dtype=torch.float32)
+        beams: Dict[Tuple[int, ...], Tuple[float, float]] = {(): (0.0, float("-inf"))}
+
+        for frame in log_probs:
+            next_beams: Dict[Tuple[int, ...], Tuple[float, float]] = {}
+            top_ids = torch.topk(frame, k=min(beam_width, frame.numel())).indices.tolist()
+            for prefix, (p_blank, p_nonblank) in beams.items():
+                prefix_total = torch.logaddexp(torch.tensor(p_blank), torch.tensor(p_nonblank)).item()
+                for token_id in top_ids:
+                    token_score = frame[token_id].item()
+                    if token_id == self.blank_id:
+                        old_blank, old_nonblank = next_beams.get(prefix, (float("-inf"), float("-inf")))
+                        next_beams[prefix] = (
+                            torch.logaddexp(torch.tensor(old_blank), torch.tensor(prefix_total + token_score)).item(),
+                            old_nonblank,
+                        )
+                        continue
+
+                    extended_prefix = prefix + (token_id,)
+                    if prefix and prefix[-1] == token_id:
+                        old_blank, old_nonblank = next_beams.get(prefix, (float("-inf"), float("-inf")))
+                        next_beams[prefix] = (
+                            old_blank,
+                            torch.logaddexp(
+                                torch.tensor(old_nonblank),
+                                torch.tensor(p_nonblank + token_score),
+                            ).item(),
+                        )
+                        old_blank, old_nonblank = next_beams.get(extended_prefix, (float("-inf"), float("-inf")))
+                        extend_score = p_blank + token_score
+                    else:
+                        old_blank, old_nonblank = next_beams.get(extended_prefix, (float("-inf"), float("-inf")))
+                        extend_score = prefix_total + token_score
+                    next_beams[extended_prefix] = (
+                        old_blank,
+                        torch.logaddexp(torch.tensor(old_nonblank), torch.tensor(extend_score)).item(),
+                    )
+
+            beams = dict(sorted(next_beams.items(), key=lambda item: max(item[1]), reverse=True)[:beam_width])
+
+        best_prefix = max(
+            beams,
+            key=lambda prefix: torch.logaddexp(torch.tensor(beams[prefix][0]), torch.tensor(beams[prefix][1])).item(),
+        )
+        return self.tokenizer.decode(list(best_prefix))
 
 
 class StreamingCTCDecoder:

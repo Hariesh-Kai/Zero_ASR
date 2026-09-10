@@ -62,7 +62,8 @@ python backend/train.py \
 **What `--resume` does**: Automatically loads `backend/checkpoints/compact_conformer/latest_model.pt`
 and continues training from epoch 50 onward.
 
-**Expected outcome**: CTC loss should drop from ~0.83 → ~0.5–0.6, WER from ~50% → ~25–35%.
+**Expected outcome**: evaluate the corrected run against `dev-clean`; the old
+loss and WER estimates are not reliable enough to guarantee a target outcome.
 
 ---
 

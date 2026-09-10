@@ -1,0 +1,15 @@
+# Core ASR runtime
+# For a CUDA-specific PyTorch build, install torch and torchaudio using the
+# matching PyTorch index for your CUDA version before installing this file.
+torch>=2.2
+torchaudio>=2.2
+
+# Backend API
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+
+# Audio and numerical processing
+numpy>=1.24
+soundfile>=0.12
+av>=12

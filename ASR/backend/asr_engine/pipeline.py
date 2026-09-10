@@ -75,6 +75,7 @@ class ASRPipeline:
         waveform: torch.Tensor,
         mode: str = "transcription",
         apply_vad: bool = False,
+        beam_width: int = 1,
     ) -> Dict[str, Any]:
         """
         Transcribes a 1D or 2D audio tensor sampled at 16kHz.
@@ -105,7 +106,11 @@ class ASRPipeline:
             log_probs, _ = self.model(mel_spec)  # (1, time // 4, vocab_size)
 
             # 3. CTC greedy decoding
-            raw_text = self.decoder.decode_logits(log_probs[0])
+            raw_text = (
+                self.decoder.decode_beam(log_probs[0], beam_width=beam_width)
+                if beam_width > 1
+                else self.decoder.decode_logits(log_probs[0])
+            )
 
             # 4. Handle Tamil script if model predicted any Unicode, or keep Romanized
             if is_tamil_script(raw_text):

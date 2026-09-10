@@ -140,7 +140,15 @@ class ConformerCTC(nn.Module):
         loss = self.ctc_loss(lp, targets, input_lengths, target_lengths)
         return loss
 
-    def save_checkpoint(self, path: Path, optimizer: Optional[torch.optim.Optimizer] = None, epoch: int = 0, loss: float = 0.0) -> None:
+    def save_checkpoint(
+        self,
+        path: Path,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        scheduler: Optional[Any] = None,
+        epoch: int = 0,
+        loss: float = 0.0,
+        best_val_cer: Optional[float] = None,
+    ) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         checkpoint = {
@@ -160,6 +168,10 @@ class ConformerCTC(nn.Module):
         }
         if optimizer is not None:
             checkpoint["optimizer"] = optimizer.state_dict()
+        if scheduler is not None:
+            checkpoint["scheduler"] = scheduler.state_dict()
+        if best_val_cer is not None:
+            checkpoint["best_val_cer"] = best_val_cer
         torch.save(checkpoint, path)
 
     @classmethod

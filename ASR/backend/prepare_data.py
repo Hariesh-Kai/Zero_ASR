@@ -6,6 +6,7 @@ import time
 import tarfile
 import urllib.request
 from pathlib import Path
+import soundfile as sf
 
 # Force UTF-8
 if hasattr(sys.stdout, "reconfigure"):
@@ -33,6 +34,9 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 LIBRISPEECH_DIR = DATA_DIR / "librispeech"
 MANIFEST_DIR = DATA_DIR / "manifests"
 MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
+
+MIN_DURATION_SECONDS = 0.5
+MAX_DURATION_SECONDS = 15.0
 LIBRISPEECH_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -109,16 +113,22 @@ def build_manifest(split_name: str, output_path: Path, limit: int = None):
                     continue
                 transcript = transcript.lower().strip()
 
-                # Fast duration estimate from file size (FLAC @ ~16kHz mono ~≈ 1 MB/min)
-                size_bytes = audio_path.stat().st_size
-                est_duration = size_bytes / (16000 * 2)  # rough FLAC estimate
+                try:
+                    audio_info = sf.info(audio_path)
+                    duration = audio_info.frames / audio_info.samplerate
+                except Exception:
+                    print(f"  WARNING: could not read duration for {audio_path}; skipping")
+                    continue
+
+                if not MIN_DURATION_SECONDS <= duration <= MAX_DURATION_SECONDS:
+                    continue
 
                 items.append({
                     "audio_path": str(audio_path.resolve()).replace("\\", "\\\\"),
                     "transcript": transcript,
                     "language": "en",
                     "speaker_id": utterance_id.split("-")[0],
-                    "duration": round(est_duration, 3),
+                    "duration": round(duration, 3),
                 })
 
     # Sort by duration ascending (helps with efficient batching)

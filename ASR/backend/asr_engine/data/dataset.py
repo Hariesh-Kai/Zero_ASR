@@ -58,6 +58,10 @@ class ASRDataset(Dataset):
 
         items = []
         for row in raw_items:
+            duration = row.get("duration")
+            if duration is not None and not 0.5 <= duration <= 15.0:
+                continue
+
             path = Path(row["audio_path"])
             if not path.is_absolute():
                 path = base_dir / path
@@ -97,14 +101,12 @@ class ASRDataset(Dataset):
         item = self.items[idx]
         waveform = self.load_audio(item.audio_path)
 
-        # Enforce duration bounds
-        if waveform.shape[0] > self.max_samples:
-            waveform = waveform[: self.max_samples]
+        # Do not truncate audio while retaining the original transcript: that
+        # creates targets which cannot be aligned by CTC. Duration filtering is
+        # performed during manifest preparation.
 
         # Tokenize target
-        # Add language tag prefix if desired
-        lang_tag = f"<{item.language}>" if item.language in ("en", "ta") else None
-        token_ids = self.tokenizer.encode(item.transcript, add_lang_tag=lang_tag)
+        token_ids = self.tokenizer.encode(item.transcript)
 
         return {
             "waveform": waveform,

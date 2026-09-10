@@ -49,6 +49,7 @@ def train_epoch(
     scheduler: Optional[Any] = None,
 ) -> float:
     model.train()
+    spec_augment.train()
     total_loss = 0.0
     num_batches = 0
     optimizer.zero_grad()
@@ -60,7 +61,7 @@ def train_epoch(
         target_lengths = batch["token_lengths"].to(device, non_blocking=True)
 
         with torch.no_grad():
-            mel = frontend(waveforms)
+            mel = frontend(waveforms, lengths=waveform_lengths)
             mel = spec_augment(mel)
             mel_lengths = torch.clamp(
                 torch.div(waveform_lengths, frontend.hop_length, rounding_mode="floor") + 1,
@@ -106,6 +107,7 @@ def evaluate(
     device: torch.device,
 ) -> dict:
     model.eval()
+    frontend.eval()
     total_loss = 0.0
     num_batches = 0
     all_refs = []
@@ -118,7 +120,7 @@ def evaluate(
         target_lengths = batch["token_lengths"].to(device, non_blocking=True)
         raw_transcripts = batch["transcripts"]
 
-        mel = frontend(waveforms)
+        mel = frontend(waveforms, lengths=waveform_lengths)
         mel_lengths = torch.clamp(
             torch.div(waveform_lengths, frontend.hop_length, rounding_mode="floor") + 1,
             max=mel.size(1),
@@ -243,9 +245,19 @@ def train(
         if "optimizer" in ckpt:
             try:
                 optimizer.load_state_dict(ckpt["optimizer"])
+                # The command-line learning rate must remain authoritative
+                # when fine-tuning an older checkpoint.
+                for group in optimizer.param_groups:
+                    group["lr"] = lr
+            except Exception:
+                pass
+        if "scheduler" in ckpt:
+            try:
+                scheduler.load_state_dict(ckpt["scheduler"])
             except Exception:
                 pass
         start_epoch = ckpt.get("epoch", 0) + 1
+        best_val_cer = ckpt.get("best_val_cer", best_val_cer)
         print(f"Resumed from epoch {start_epoch - 1}")
 
     print("\n" + "=" * 70)
@@ -291,9 +303,23 @@ def train(
 
         if val_metrics["cer"] < best_val_cer:
             best_val_cer = val_metrics["cer"]
-            model.save_checkpoint(ckpt_dir / "best_model.pt", optimizer=optimizer, epoch=epoch, loss=val_metrics["val_loss"])
+            model.save_checkpoint(
+                ckpt_dir / "best_model.pt",
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=epoch,
+                loss=val_metrics["val_loss"],
+                best_val_cer=best_val_cer,
+            )
 
-        model.save_checkpoint(ckpt_dir / "latest_model.pt", optimizer=optimizer, epoch=epoch, loss=val_metrics["val_loss"])
+        model.save_checkpoint(
+            ckpt_dir / "latest_model.pt",
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epoch=epoch,
+            loss=val_metrics["val_loss"],
+            best_val_cer=best_val_cer,
+        )
 
     print("\nTraining completed! Best checkpoint saved to:", (ckpt_dir / "best_model.pt").resolve())
 
