@@ -407,14 +407,17 @@ Response:
 |---|---|
 | Architecture | Conformer-CTC |
 | Parameters | ~3.4M |
-| Epochs trained | 50 / 50 |
-| Best CTC loss | 0.8296 |
-| Estimated WER | ~40–50% |
+| Epochs trained | 101 (50 base + 51 fine-tuned) |
+| Best train loss | **0.4833** (epoch 98) |
+| Best val loss | **0.5339** (epoch 98) |
+| Val WER | **~38.6%** |
+| Val CER | **~12.2%** |
 | Training data | LibriSpeech train-clean-100 |
-| Checkpoint saved | `best_model.pt` (epoch 47) |
+| Checkpoint saved | `best_model.pt` (epoch 98) |
 
-> The model is functional but needs further fine-tuning (Option 2) for production-quality transcription.
-> Run Option 2 to reduce WER to ~25–35%, or Option 1 for a larger, more accurate model.
+> ✅ **Fine-tuning (Option 2) complete.** Loss improved from 0.83 → 0.49. WER improved to ~38.6%.
+> The model has reached its **capacity ceiling** at this architecture size (3.4M params).
+> For production-quality ASR (<20% WER), run **Option 1** with `d_model=256, layers=8` (~10–12M params).
 
 ---
 
